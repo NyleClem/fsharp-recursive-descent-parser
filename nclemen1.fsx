@@ -41,33 +41,65 @@ for i = 0 to n step do x := x + i done
 
 // Tokens
 type Token =
-    | WRITE  // the "write" keyword
-    | ASGN   // the assignment operator ":="
-    | EQUAL  // the assignment operator "="
-    | FOR    // the "for" keyword
-    | TO     // the "to" keyword
-    | DO     // the "do" keyword
-    | DONE   // the "done" keyword
-    | ADDOP  // addition or subtraction operators "+" or "-"
-    | CONDOP // conditional operators "<", "==", etc.
-    | STEP   // the "step" keyword
-    | ID of string // ID may be any token/string not above/below, but ID is also bound to a string value
+| DO                 // the "do" keyword
+| OD                //the "od" keyword
+| READ             //the "read" keyword
+| WRITE           //the "write" keyword
+| IF               // the "if" keyword
+| THEN            // the "then" keyword
+| ELSE            // the "else" keyword
+| ENDIF           //the "endif" keyword
+| FOR            // the "for" keyword
+| IN             // the "in" keyword
+| DEF            // the "def" keyword
+| WHILE          // the "while" keyword
+| CALL_ASSIGN    // the "<-" operator
+| EQUALS         // the "=" operator
+| PARENT_START    // the "(" symbol
+| PARENT_END      // the ")" symbol
+| BRACKET_START   // the "[" symbol
+| BRACKET_END    // the "]" symbol
+| COMMA         // the "," symbol
+| SUBTRACT      // the "-" operator
+| ADD           // the "+" operator
+| MULTIPLY      // the "*" operator
+| DIVIDE        // the "/" operator
+| GREATER_THAN  // the ">" operator
+| LESS_THAN     // the "<" operator
+| REL_EQUALS    // the "==" operator
+| ID of string  // Stores the lexeme of any unrecognized token
+
 
     // Member Function to get a token from a lexeme (String)
     static member tokenFromLexeme str =
         match str with
-        | "write" -> WRITE     // "write" maps to the WRITE token
-        | ":=" -> ASGN         // ":=" maps to the ASGN token
-        | "+" | "-" -> ADDOP   // "+" and "-" map to the ADD token
-        | "<" | "==" -> CONDOP // "<" and "==" map to the CONDOP token
-        | "=" -> EQUAL         // "=" maps to the EQUAL token
-        | "step" -> STEP       // "step" maps to the STEP token
-        | "for" -> FOR         // "for" maps to the FOR token
-        | "to" -> TO           // "to" maps to the TO token
-        | "do" -> DO           // "do" maps to the DO token
-        | "done" -> DONE       // "done" maps to the DONE token
-        | _ -> ID str // Everything else is just an ID
-
+        | "do" -> DO
+        | "od" -> OD
+        | "read" -> READ
+        | "write" -> WRITE
+        | "if" -> IF
+        | "then" -> THEN
+        | "else" -> ELSE
+        | "endif" -> ENDIF
+        | "for" -> FOR
+        | "in" -> IN
+        | "def" -> DEF
+        | "while" -> WHILE
+        | "<-" -> CALL_ASSIGN
+        | "=" -> EQUALS
+        | "(" -> PARENT_START
+        | ")" -> PARENT_END
+        | "[" -> BRACKET_START
+        | "]" -> BRACKET_END
+        | "," -> COMMA
+        | "-" -> SUBTRACT
+        | "+" -> ADD
+        | "*" -> MULTIPLY
+        | "/" -> DIVIDE
+        | ">" -> GREATER_THAN
+        | "<" -> LESS_THAN
+        | "==" -> REL_EQUALS
+        |  _ -> ID str
 
 
 /// NOTE: The `and` keyword in F# is used to define mutually recursive functions or types.
@@ -115,91 +147,184 @@ and ``$$`` =
 // <stmt_list> ::= <stmt> <stmt_list> | ε
 // stmt_list may be empty/epsilon, so no fail case is necessary. (if an epsilon production, the list will be returned unchanged)
 and stmt_list lst =
-    // Since FIRST(stmt_list) is { WRITE, FOR, ID, then it is a stmt, otherwise, it is an epsilon production.
-    // "_" is a wildcard, so it will match any token. We don't care what it is, just that it is there.
+    // If the first token begins a statement, then parse the statement and continue parsing the list of statements.
     match lst with
-    | ( WRITE | ID _ | FOR ) :: _ -> lst |> stmt |> stmt_list
+    | (ID _ |READ|WRITE|IF|FOR|WHILE|DEF ) :: _ -> lst |> stmt |> stmt_list
     | x -> x // ε case, so just return the list unchanged.
 
 
-// <stmt> ::= id := <expr> | read id | write <expr> | <for_stmt>
+// stmt ::= id assign | read_stmt | write_stmt | if_stmt
+//        | for_stmt | while_stmt | fun_def
+
 and stmt lst =
-    // For debugging!
-    printfn $"DEBUG stmt rule: The token list  = %A{lst}" // the is a format specifier will print the whole list
-
     match lst with
-    | ID _ :: ASGN :: xs -> xs |> expr  // id := <expr>
-    | WRITE :: xs -> xs |> expr         // write <expr>
-    | FOR :: _ -> lst |> for_stmt       // <for_stmt>
- 
-    | _ -> failwithf $"Not a valid statement: %A{lst}" // no empty case allowed
+    | ID _ :: xs -> xs |> assign
+    | READ :: _ -> lst |> read_stmt
+    | WRITE :: _ -> lst |> write_stmt
+    | IF :: _ -> lst |> if_stmt
+    | FOR :: _ -> lst |> for_stmt
+    | WHILE :: _ -> lst |> while_stmt
+    | DEF :: _ -> lst |> fun_def
+    | _ -> failwithf $"Not a valid statement: %A{lst}"
+    // stmt_block ::= do stmt_list od
+
+and stmt_block lst =
+    match lst with
+    | DO :: xs ->
+        match xs |> stmt_list with
+        | OD :: remaining -> remaining
+        | _ -> failwith "Expected 'od'"
+    | _ -> failwith "Expected 'do'"
+
+    // read_stmt ::= read id
+and read_stmt lst =
+    match lst with
+    | READ :: ID _ :: xs -> xs
+    | _ -> failwith "Expected 'read' followed by an ID"
 
 
-// <expr> ::= <term> <term_tail>
-and expr lst =
-    // Nothing to check, so just follow and implement the rule as is.
-    lst |> term |> term_tail
+    // write_stmt ::= write expr
+and write_stmt lst =
+    match lst with
+    | WRITE :: xs -> xs |> expr
+    | _ -> failwith "Expected 'write'"
 
+// if_stmt ::= if cond then stmt_list else_stmt
 
-// <term_tail> ::=  <AddOp> <term> <term_tail> | ε
-and term_tail =
-    function
-    | ADDOP :: xs -> xs |> term |> term_tail
-    | x -> x // ε case, so just return the list unchanged.
+and if_stmt lst =
+    match lst with
+    | IF :: xs ->
+        match xs |> cond with
+        | THEN :: remaining -> remaining |> stmt_list |> else_stmt
+        | _ -> failwith "Expected 'then'"
+    | _ -> failwith "Expected 'if'"
 
+// else_stmt ::= else stmt_list endif | endif
+and else_stmt lst =
+    match lst with
+    | ELSE :: xs ->
+        match xs |> stmt_list with
+        | ENDIF :: remaining -> remaining
+        | _ -> failwith "Expected 'endif'"
+    | ENDIF :: xs -> xs
+    | _ -> failwith "Expected 'else' or 'endif'"
 
-// <term> ::= id
-and term =
-    function
-    | ID _ :: xs -> xs
-    | _ -> failwithf "Expecting an ID"
-
-
-
-// <for_stmt> ::= 'for' id '=' id 'to' id <step_stmt> 'do' <stmt_list> 'done'
-// NOTE:  This function does a lot of things in different ways ONLY TO ILLUSTRATE DIFFERENT TECHNIQUES!!!
+    // for_stmt ::= for id in for_tail
 and for_stmt lst =
-    printfn $"In for_stmt: The token list  = %A{lst}" // the is a format specifier will print the whole list
-    
-    // A nested helper function to match the "DONE" token and return the remaining list.
-    let match_DONE_token =
-        function
-        | DONE :: xs -> xs
-        | _ -> failwith "Expected DONE"
-
-    // A nested helper function to match the "STEP" token and return the remaining list.
-    let match_STEP_token =
-        function
-        | STEP :: ID _ :: xs -> xs
-        | xs -> xs // ε case, so just return the list unchanged.
-
-    // All "for loops" are structured as:  "for a = b to c do ... done"
-    // So, this is just an illustration of a long pattern match for a series of tokens.
     match lst with
+    | FOR :: ID _ :: IN :: xs -> xs |> for_tail
+    | _ -> failwith "Expected 'for id in'"
 
-    // The pattern match is a series of tokens that must be in order.
-    // This is long pattern only to illustrate a point.  It could be broken up into smaller patterns.
-    | FOR :: ID _ :: EQUAL :: ID _ :: TO :: ID _ :: xs ->
-        // This is a new line only to allow for nicer indentation below.
-        // If the above pattern matches, then the following will be executed.
-        // The "xs" is the remaining list after the pattern match.
-        xs
+    // for_tail ::= array stmt_block | id stmt_block
+and for_tail lst =
+    match lst with
+    | BRACKET_START :: _ -> lst |> array |> stmt_block
+    | ID _ :: xs -> xs |> stmt_block
+    | _ -> failwith "Expected an array or ID"
 
-        // Pipe the remaining list to the "step_stmt" function, which is defined above.
-        |> match_STEP_token
+    // fun_def ::= def id ( id_list ) stmt_block
+and fun_def lst =
+    match lst with
+    | DEF :: ID _ :: PARENT_START :: xs ->
+        match xs |> id_list with
+        | PARENT_END :: remaining -> remaining |> stmt_block
+        | _ -> failwith "Expected ')'"
+    | _ -> failwith "Expected 'def id ('"
 
-        // If the remaining list starts with the "DO" token, pipe the remaining list to the "stmt_list" function.
-        // Of course, any number of patterns could be matched here, but this is just an example. (and it's a
-        // bit simpler than using "if ... then ... else ...")
-        |> function
-            | DO :: xs  ->  xs |> stmt_list
-            | _ -> failwith "Expected DO"
+    // while_stmt ::= while cond stmt_block
+and while_stmt lst =
+    match lst with
+    | WHILE :: xs -> xs |> cond |> stmt_block
+    | _ -> failwith "Expected 'while'"
 
-        |> match_DONE_token
+// assign ::= <- fun_call | = assign_tail
+and assign lst =
+    match lst with
+    | CALL_ASSIGN :: xs -> xs |> fun_call
+    | EQUALS :: xs -> xs |> assign_tail
+    | _ -> failwith "Expected '<-' or '='"
 
-    | _ -> failwith $"FOR expected but found {List.head lst}" // no empty case allowed
+// assign_tail ::= expr | array
+and assign_tail lst =
+    match lst with
+    | (ID _ | PARENT_START) :: _ -> lst |> expr
+    | BRACKET_START :: _ -> lst |> array
+    | _ -> failwith "Expected an expression or array"
 
+// fun_call ::= id ( param_list )
+and fun_call lst =
+    match lst with
+    | ID _ :: PARENT_START :: xs ->
+        match xs |> param_list with
+        | PARENT_END :: remaining -> remaining
+        | _ -> failwith "Expected ')'"
+    | _ -> failwith "Expected function name followed by '('"
 
+    // array ::= [ id_list ]
+and array lst =
+    match lst with
+    | BRACKET_START :: xs ->
+        match xs |> id_list with
+        | BRACKET_END :: remaining -> remaining
+        | _ -> failwith "Expected ']'"
+    | _ -> failwith "Expected '['"
+
+// param_list ::= expr param_tail | ε
+and param_list lst =
+    match lst with
+    | (ID _ | PARENT_START) :: _ -> lst |> expr |> param_tail
+    | x -> x
+
+    // param_tail ::= , expr param_tail | ε
+and param_tail lst =
+    match lst with
+    | COMMA :: xs -> xs |> expr |> param_tail
+    | x -> x
+
+    // id_list ::= id id_tail
+and id_list lst =
+    match lst with
+    | ID _ :: xs -> xs |> id_tail
+    | _ -> failwith "Expected an ID"
+
+// id_tail ::= , id_list | ε
+and id_tail lst =
+    match lst with
+    | COMMA :: xs -> xs |> id_list
+    | x -> x
+
+// expr ::= id expr_tail | ( expr )
+and expr lst =
+    match lst with
+    | ID _ :: xs -> xs |> expr_tail
+    | PARENT_START :: xs ->
+        match xs |> expr with
+        | PARENT_END :: remaining -> remaining
+        | _ -> failwith "Expected ')'"
+    | _ -> failwith "Expected an ID or '('"
+
+// expr_tail ::= arith_op expr | ε
+and expr_tail lst =
+    match lst with
+    | (SUBTRACT | ADD | MULTIPLY | DIVIDE) :: _ ->
+        lst |> arith_op |> expr
+    | x -> x
+
+    // cond ::= expr rel_oper expr
+and cond lst =
+    lst |> expr |> rel_oper |> expr
+
+    // arith_op ::= - | + | * | /
+and arith_op lst =
+    match lst with
+    | (SUBTRACT | ADD | MULTIPLY | DIVIDE) :: xs -> xs
+    | _ -> failwith "Expected an arithmetic operator"
+
+// rel_oper ::= > | < | ==
+and rel_oper lst =
+    match lst with
+    | (GREATER_THAN | LESS_THAN | REL_EQUALS) :: xs -> xs
+    | _ -> failwith "Expected a relational operator"
 
 
 (* ************************************************************************************************ *
