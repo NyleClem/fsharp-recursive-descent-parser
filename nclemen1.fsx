@@ -117,16 +117,15 @@ type Token =
 
 // Start parsing by piping the list to the first rule
 // TIP: to test a specific rule, just pipe the list to that rule instead of "program"
-let rec start xs = 
+let rec start str xs =
     try
-        match xs |> program with 
-        | [] -> printfn "SUCCESS!!!" |> ignore 
-        | _  -> printfn "Parse Failed: Unprocessed tokens remain!" |> ignore
-    with Failure msg 
-        -> printfn $"Parsing error... %s{msg}" |> ignore
+        xs |> program |> ignore
+        printfn "SUCCESS!!!"
+        printfn $"The input {str} follows the grammar."
+    with Failure msg ->
+        printfn $"The input {str} is invalid because: {msg}"
+    xs
     
-    xs // Reurn the list of tokens for debugging purposes.
-
 // <program> ::= <stmt_list> $$
 and program xs =
     // Note that the "$$" is a special meta-token that represents the "Top of Stack" or "Empty List"
@@ -367,7 +366,7 @@ let main () =
         let tokenList = getTokenList str
         printfn $"\nToken List BEFORE Parsing: %A{tokenList}"
 
-        let parsedList = start tokenList
+        let parsedList = start str tokenList
         printfn $"Tokens List AFTER Parsing: %O{parsedList}"
 
 
