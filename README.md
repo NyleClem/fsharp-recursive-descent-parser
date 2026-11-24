@@ -23,7 +23,7 @@ This project explores functional programming principles, including recursion, pa
 ### Running the Parser
 
 ```bash
-dotnet fsi Parser_Sample.fsx
+dotnet fsi nclemen1.fsx
 ```
 
 Enter an input string when prompted.
